@@ -11,6 +11,7 @@ A bot for telegram that allow managing files similar to how google drive does.
 
 ### Steps to prepare workspace:
 
-1. (optional) Run `python3 -m venv env` to create a new virtual environment
-2. If you created a virtual environment activate it with `. env/bin/activate`
-3. Install the requirements with `pip install -r requirements.txt`
+1. (optional) Run `python3 -m venv env` to create a new virtual environment.
+2. If you created a virtual environment activate it with `. env/bin/activate`.
+3. Install the requirements with `pip install -r requirements.txt`.
+4. Place the secret token in a file named token.txt in the root of the project file.
