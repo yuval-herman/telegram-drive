@@ -2,7 +2,7 @@
 import logging
 from telegram import ForceReply, Update, Document
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
-
+from sqlDB import *
 # Enable logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -34,13 +34,10 @@ async def file_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     file_name = 'unknown file'
     if isinstance(received_file, Document):
         file_name = f'{received_file.file_name} {received_file.mime_type} file'
-        save_file(received_file.file_id, update.effective_user.id)
+        insert_file(received_file.file_name, received_file.file_id,
+                    update.effective_user.id)
 
     await update.message.reply_text(f'Got your {file_name}!')
-
-
-def save_file(file_id: str, user_id: int):
-    print(f'file: {file_id}, user: {user_id}')
 
 
 def main() -> None:
