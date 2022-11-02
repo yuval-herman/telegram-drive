@@ -18,3 +18,8 @@ def get_user_files(user_id: int) -> List[Tuple[str, int]]:
 
 def get_fileID_by_hash(file_hash: int) -> str:
     return cur.execute("SELECT id FROM files WHERE hash = ?", [file_hash]).fetchone()[0]
+
+
+def search_file_for_user(user_id: int, file_name: str) -> List[Tuple[str, int]]:
+    return cur.execute("""SELECT name, hash FROM files
+    WHERE user_id = ? AND name LIKE ?""", [user_id, f'%{file_name}%']).fetchall()
