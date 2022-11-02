@@ -6,7 +6,10 @@ cur.execute("""CREATE TABLE IF NOT EXISTS files(name, id UNIQUE, user_id,
             FOREIGN KEY(user_id) REFERENCES users(id))""")
 
 
-def insert_file(name: str, file_id: str, user_id: int):
+def insert_user(user_id: int):
     cur.execute("INSERT OR IGNORE INTO users VALUES(?)", [user_id])
+
+
+def insert_file(name: str, file_id: str, user_id: int):
     cur.execute("INSERT INTO files VALUES(?,?,?)", [name, file_id, user_id])
     con.commit()
