@@ -2,6 +2,8 @@
 
 A bot for telegram that allow managing files similar to how google drive does.
 
+Working instance at http://t.me/file_storm_bot
+
 # Run locally
 
 ### Requirements:
