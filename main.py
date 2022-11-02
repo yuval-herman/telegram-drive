@@ -42,12 +42,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     file_id = get_fileID_by_hash(int(query.data))
-    print(file_id)
     await query.edit_message_reply_markup(None)
     await query.edit_message_text('Working on it...\nDepending on the file size this might take a while')
     await query.message.reply_document(file_id)
     await query.message.delete()
-    # await query.edit_message_text(text=f"Selected option: {query.data}")
 
 
 async def file_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
