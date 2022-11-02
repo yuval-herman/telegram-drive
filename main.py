@@ -21,9 +21,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
-async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Echo the user message."""
-    await update.message.reply_text(update.message.text)
+async def list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    if not user:
+        return
+    file_list = get_user_files(user.id)
+
+    await update.message.reply_text('\n'.join(file_list[0]))
 
 
 async def file_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -46,8 +50,7 @@ def main() -> None:
 
     application.add_handler(CommandHandler("start", start))
 
-    application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND, echo))
+    application.add_handler(CommandHandler('list', list))
 
     application.add_handler(MessageHandler(filters.ATTACHMENT, file_received))
 
