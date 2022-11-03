@@ -50,7 +50,7 @@ async def search_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
     file_list = search_file_for_user(user.id, update.message.text)
     if len(file_list) == 0:
-        await update.message.reply_text("You haven't added any files yet.\nSend me any file to start saving files.")
+        await update.message.reply_text(f"Didn't find anything with '{update.message.text}' in it🤷.")
     keyboard = [
         [InlineKeyboardButton(
             file[0], callback_data=file[1])] for file in file_list
@@ -64,7 +64,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Parses the CallbackQuery and updates the message text."""
     query = update.callback_query
     await query.answer()
-    file_id = get_fileID_by_hash(int(query.data))
+    file_id = get_telegramID_by_id(int(query.data))
     await query.edit_message_reply_markup(None)
     await query.edit_message_text('Working on it...\nDepending on the file size this might take a while')
     await query.message.reply_document(file_id)
@@ -80,7 +80,7 @@ async def file_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if isinstance(received_file, Document):
         file_name = f'{received_file.file_name} {received_file.mime_type} file'
         insert_file(received_file.file_name, received_file.file_id,
-                    hash(received_file.file_id), update.effective_user.id)
+                    update.effective_user.id)
 
     await update.message.reply_text(f'Got your {file_name}!')
 
