@@ -93,12 +93,12 @@ def main() -> None:
     application.add_handler(CommandHandler('list', list))
     application.add_handler(CommandHandler('search', search_commend))
 
-    application.add_handler(MessageHandler(
-        filters.TEXT and ~filters.COMMAND, search_file))
-
     application.add_handler(MessageHandler(filters.ATTACHMENT, file_received))
 
     application.add_handler(CallbackQueryHandler(button))
+
+    application.add_handler(MessageHandler(
+        filters.TEXT and ~filters.COMMAND, search_file))
     application.run_polling()
 
 
