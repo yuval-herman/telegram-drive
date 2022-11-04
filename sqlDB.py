@@ -8,21 +8,23 @@ cur.execute(
         name,
         telegram_id UNIQUE,
         user_id,
-        dir)""")
+        dir REFERENCES directories(directory))""")
 
 cur.execute(
-    """CREATE TABLE IF NOT EXISTS directories (
-        directory INTEGER PRIMARY KEY, 
+    """CREATE TABLE IF NOT EXISTS directories(
+        directory INTEGER PRIMARY KEY,
         directory_Parent REFERENCES directories(directory),
         owner_id,
         name
         )""")
+con.commit()
 
 
-def insert_file(name: str, telegram_id: str, user_id: int, directory: int | None = None) -> None:
-    cur.execute("INSERT INTO files (name,telegram_id,user_id,dir) VALUES(?,?,?,?)",
-                [name, telegram_id, user_id, directory])
+def insert_file(name: str, telegram_id: str, user_id: int, directory: int | None = None) -> int | None:
+    rowid = cur.execute("INSERT INTO files (name,telegram_id,user_id,dir) VALUES(?,?,?,?)",
+                        [name, telegram_id, user_id, directory]).lastrowid
     con.commit()
+    return rowid
 
 
 def get_user_files(user_id: int) -> List[Tuple[str, int]]:
@@ -36,3 +38,37 @@ def get_telegramID_by_id(file_id: int) -> str:
 def search_file_for_user(user_id: int, file_name: str) -> List[Tuple[str, int]]:
     return cur.execute("""SELECT name, id FROM files
     WHERE user_id = ? AND name LIKE ?""", [user_id, f'%{file_name}%']).fetchall()
+
+
+def get_dir_tree(parent_id: int | None, name: str, user_id: int) -> List[int | str] | None:
+    """directory structure is:
+    1.directory
+    2.directory_Parent
+    3.owner_id
+    4.name
+    """
+    return cur.execute(f"""SELECT * FROM directories
+    WHERE {"directory_Parent = ?" if parent_id else "directory_Parent is ?"} AND name = ? AND owner_id = ?""", [parent_id, name, user_id]).fetchone()
+
+
+def get_root_dir_names(user_id: int) -> List[str] | None:
+    return [name[0] for name in (cur.execute(f"""SELECT name FROM directories
+    WHERE directory_Parent is null AND owner_id = ?""", [user_id]).fetchall() or [])]
+
+
+def get_dir_names_under_dir(user_id: int, parent_dir: int | None) -> List[str] | None:
+    return [name[0] for name in (cur.execute(f"""SELECT name FROM directories
+    WHERE directory_Parent = ? AND owner_id = ?""", [parent_dir, user_id]).fetchall() or [])]
+
+
+def change_file_dir(file_id: int, directory_id: int):
+    cur.execute("""UPDATE files SET dir = ? WHERE id = ?""",
+                [directory_id, file_id])
+    con.commit()
+
+
+def insert_dir(directory_Parent: int | None, owner_id: int, name: str) -> int | None:
+    rowid = cur.execute("INSERT INTO directories (directory_Parent,owner_id,name) VALUES(?,?,?)", [
+        directory_Parent, owner_id, name]).lastrowid
+    con.commit()
+    return rowid
