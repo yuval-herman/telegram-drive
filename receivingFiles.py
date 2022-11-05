@@ -1,9 +1,10 @@
 from enum import Enum, auto
+from typing import TypedDict, cast
 
-from telegram import (Document, KeyboardButton, ReplyKeyboardMarkup,
-                      ReplyKeyboardRemove, Update, error)
+from telegram import (Document, InlineKeyboardButton, Message, InlineKeyboardMarkup,
+                      Update, error)
 from telegram.ext import (ContextTypes, ConversationHandler, MessageHandler,
-                          filters)
+                          filters, CallbackQueryHandler)
 
 from sqlDB import *
 
@@ -12,100 +13,135 @@ class File_conversation(Enum):
     choose_dir = auto()
 
 
-async def file_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Save file to DB"""
-    if not update.effective_user:
-        return
-    received_file = update.message.effective_attachment
-    file_name = 'unknown file'
-    if context.user_data is None:
-        context.user_data = {}
-    if isinstance(received_file, Document):
-        file_name = f'{received_file.file_name} {received_file.mime_type} file'
-        file_id = insert_file(received_file.file_name, received_file.file_id,
-                              update.effective_user.id)
-        context.user_data['last_file_id'] = file_id
-        context.user_data['dir_parent_id'] = None
-    options = ['cancel']
-    options.extend(get_root_dir_names(update.effective_user.id) or [])
-    keyboard = [
-        [KeyboardButton(
-            option, callback_data=option)] for option in (options)
-    ]
+class UserData(TypedDict):
+    last_file_id: int | None      # last received file from user
+    dir_id: int | None            # current dir id
+    dir_parent_id: int | None     # current dir parent id
+    curr_message: Message | None  # last message sent from the bot
 
-    reply_markup = ReplyKeyboardMarkup(keyboard)
-    context.user_data['curr_message'] = (
-        await update.message.reply_text(f'Got your {file_name}!\nwhere would you like to save it?', reply_markup=reply_markup))
-    await update.message.delete()
+
+async def file_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Called when receiving a document"""
+    if not update.effective_user:
+        return ConversationHandler.END
+
+    user = update.effective_user
+    user_data = cast(UserData, context.user_data)
+    received_file = update.message.document
+    file_name = received_file.file_name
+    file_id = insert_file(file_name, received_file.file_id,
+                          user.id)
+
+    # initialize user data for conversation
+    user_data['last_file_id'] = file_id
+    user_data['dir_id'] = None
+    user_data['dir_parent_id'] = None
+    user_data['curr_message'] = None
+
+    options = ['cancel']
+
+    options.extend(get_root_dir_names(user.id) or [])
+    keyboard = [
+        [InlineKeyboardButton(
+            option, callback_data=option)] for option in options
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    user_data['curr_message'] = (
+        await update.message.reply_text(f'I got your file, {file_name}!\n' +
+                                        'where would you like to save it?', reply_markup=reply_markup))
+    try:
+        await update.message.delete()
+    except AttributeError:
+        pass
     return File_conversation.choose_dir
 
 
 async def choose(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Save file to DB"""
-    if not update.effective_user or not context.user_data:
+    """Called until user chooses a directory for upload or cancels the conversation"""
+    if not update.effective_user:
         return ConversationHandler.END
-    if 'last_file_id' not in context.user_data:
-        await update.message.reply_text('some error occurred... sorry🙇')
-        context.user_data.clear()
+
+    query = update.callback_query
+    if query:
+        await query.answer()
+        message_text = query.data
+    else:
+        message_text = update.message.text
+    user_data = cast(UserData, context.user_data)
+    if not user_data['last_file_id']:
+        await update.message.reply_text('critical error occurred.\n please try again later')
         return ConversationHandler.END
-    if update.message.text == 'upload here':
-        if 'dir_id' not in context.user_data:
-            try:
-                await context.user_data['curr_message'].edit_text("can't upload to the root directory.\n" +
-                                                                  "create a directory first by sending any name and upload your file there.")
-            except error.BadRequest:
-                context.user_data['curr_message'] = await update.message.reply_text("can't upload to the root directory.\n" +
-                                                                                    "create a directory first by sending any name and upload your file there.")
+
+    if message_text == 'upload here':
+        if not user_data['dir_id']:
+            # try:
+            await user_data['curr_message'].edit_text("can't upload to the root directory.\n" +
+                                                      "create a directory first by sending any name and upload your file there.")
+            # except error.BadRequest:
+            #     user_data['curr_message'] = await update.message.reply_text("can't upload to the root directory.\n" +
+            # "create a directory first by sending any name and upload your file there.")
             return
         change_file_dir(
-            context.user_data['last_file_id'], context.user_data['dir_id'])
+            user_data['last_file_id'], user_data['dir_id'])
+        # try:
+        await user_data['curr_message'].edit_text("uploaded successfully", reply_markup=InlineKeyboardMarkup([]))
+        # except error.BadRequest:
+        #     user_data['curr_message'] = await update.message.reply_text("uploaded successfully", reply_markup=ReplyKeyboardRemove())
+
         try:
-            await context.user_data['curr_message'].edit_text("uploaded successfully", reply_markup=ReplyKeyboardRemove())
-        except error.BadRequest:
-            context.user_data['curr_message'] = await update.message.reply_text("uploaded successfully", reply_markup=ReplyKeyboardRemove())
-
-        await update.message.delete()
-        context.user_data.clear()
+            await update.message.delete()
+        except AttributeError:
+            pass
         return ConversationHandler.END
-    if update.message.text == 'cancel':
-        try:
-            await context.user_data['curr_message'].edit_text("Alright, I'm just gonna forget you did that👀")
-        except error.BadRequest:
-            context.user_data['curr_message'] = await update.message.reply_text("Alright, I'm just gonna forget you did that👀")
-        context.user_data.clear()
+    if message_text == 'cancel':
+        # try:
+        await user_data['curr_message'].edit_text("Alright, I'm just gonna forget you did that👀", reply_markup=InlineKeyboardMarkup([]))
+        # except error.BadRequest:
+        #     user_data['curr_message'] = await update.message.reply_text("Alright, I'm just gonna forget you did that👀")
         return ConversationHandler.END
 
-    options = ['upload here', 'cancel']
-    options.extend(get_dir_names_under_dir(
-        update.effective_user.id, context.user_data.get('dir_id')) or [])
-    keyboard = [
-        [KeyboardButton(
-            option, callback_data=option)] for option in (options)
-    ]
-
-    reply_markup = ReplyKeyboardMarkup(keyboard)
-    directory = get_dir_tree(
-        context.user_data.get('dir_id'), update.message.text, update.effective_user.id)
+    directory = get_dir(user_data.get('dir_id'),
+                        message_text, update.effective_user.id)
     if directory:
+        # generate reply options
+        options = ['upload here', 'cancel']
+        options.extend(get_dir_names_under_dir(
+            update.effective_user.id, user_data.get('dir_id')) or [])
+        keyboard = [[InlineKeyboardButton(
+            option, callback_data=option)] for option in options]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        # try:
+        await user_data['curr_message'].edit_text(directory[3], reply_markup=reply_markup)
+
+        # except error.BadRequest:
+        #     user_data['curr_message'] = await update.message.reply_text(str(directory[3]), reply_markup=reply_markup)
         try:
-            await context.user_data['curr_message'].edit_text(str(directory[3]), reply_markup=reply_markup)
-        except error.BadRequest:
-            context.user_data['curr_message'] = await update.message.reply_text(str(directory[3]), reply_markup=reply_markup)
-        await update.message.delete()
-        context.user_data['dir_id'] = directory[0]
+            await update.message.delete()
+        except AttributeError:
+            pass
+        user_data['dir_id'] = directory[0]
         return
-    await update.message.delete()
-    await context.user_data['curr_message'].edit_text(f"created new directory '{update.message.text}'")
-    context.user_data['dir_id'] = (insert_dir(
-        context.user_data.get('dir_id'), update.effective_user.id, update.message.text))
+    try:
+        await update.message.delete()
+    except AttributeError:
+        pass
+    options = ['upload here', 'cancel']
+    keyboard = [[InlineKeyboardButton(
+        option, callback_data=option)] for option in options]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await user_data['curr_message'].edit_text(f"created new directory '{message_text}'", reply_markup=reply_markup)
+    user_data['dir_id'] = (insert_dir(user_data.get(
+        'dir_id'), update.effective_user.id, message_text))
 
 
 file_conversation = ConversationHandler(
     entry_points=[MessageHandler(
-        filters.ATTACHMENT, file_received)],
+        filters.Document.ALL, file_received)],
     states={
         File_conversation.choose_dir: [
             MessageHandler(filters.TEXT, choose),
+            CallbackQueryHandler(choose)
         ],
     },
     fallbacks=[],

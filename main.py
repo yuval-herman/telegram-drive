@@ -36,23 +36,7 @@ async def list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("You haven't added any files yet.\nSend me any file to start saving files.")
     keyboard = [
         [InlineKeyboardButton(
-            file[0], callback_data=file[1])] for file in file_list
-    ]
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text('Click on a file to get it', reply_markup=reply_markup)
-
-
-async def dirs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user = update.effective_user
-    if not user:
-        return
-    file_list = get_user_files(user.id)
-    if len(file_list) == 0:
-        await update.message.reply_text("You haven't added any files yet.\nSend me any file to start saving files.")
-    keyboard = [
-        [InlineKeyboardButton(
-            file[0], callback_data=file[1])] for file in file_list
+            get_dir_full_path(user.id, file[2])+file[0], callback_data=file[1])] for file in file_list
     ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -75,7 +59,7 @@ async def search_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text(f"Didn't find anything with '{update.message.text}' in it🤷.")
     keyboard = [
         [InlineKeyboardButton(
-            file[0], callback_data=file[1])] for file in file_list
+            get_dir_full_path(user.id, file[2])+file[0], callback_data=file[1])] for file in file_list
     ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -97,14 +81,13 @@ def main() -> None:
     with open('token.txt', 'r') as token_file:
         application = Application.builder().token(token_file.read()).build()
 
+    application.add_handler(file_conversation)
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler('list', list))
-    application.add_handler(CommandHandler('dirs', dirs))
     application.add_handler(CommandHandler('search', search_commend))
 
     application.add_handler(CallbackQueryHandler(button))
-
-    application.add_handler(file_conversation)
 
     application.add_handler(MessageHandler(
         filters.TEXT and ~filters.COMMAND, search_file))
