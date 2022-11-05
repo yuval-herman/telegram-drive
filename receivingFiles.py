@@ -73,21 +73,17 @@ async def choose(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('critical error occurred.\n please try again later')
         return ConversationHandler.END
 
+    if not user_data['curr_message']:
+        user_data['curr_message'] = await update.effective_user.send_message('Thinking...')
+
     if message_text == 'upload here':
         if not user_data['dir_id']:
-            # try:
             await user_data['curr_message'].edit_text("can't upload to the root directory.\n" +
                                                       "create a directory first by sending any name and upload your file there.")
-            # except error.BadRequest:
-            #     user_data['curr_message'] = await update.message.reply_text("can't upload to the root directory.\n" +
-            # "create a directory first by sending any name and upload your file there.")
             return
         change_file_dir(
             user_data['last_file_id'], user_data['dir_id'])
-        # try:
         await user_data['curr_message'].edit_text("uploaded successfully", reply_markup=InlineKeyboardMarkup([]))
-        # except error.BadRequest:
-        #     user_data['curr_message'] = await update.message.reply_text("uploaded successfully", reply_markup=ReplyKeyboardRemove())
 
         try:
             await update.message.delete()
@@ -95,10 +91,7 @@ async def choose(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         return ConversationHandler.END
     if message_text == 'cancel':
-        # try:
         await user_data['curr_message'].edit_text("Alright, I'm just gonna forget you did that👀", reply_markup=InlineKeyboardMarkup([]))
-        # except error.BadRequest:
-        #     user_data['curr_message'] = await update.message.reply_text("Alright, I'm just gonna forget you did that👀")
         return ConversationHandler.END
 
     directory = get_dir(user_data.get('dir_id'),
@@ -111,11 +104,7 @@ async def choose(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[InlineKeyboardButton(
             option, callback_data=option)] for option in options]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        # try:
         await user_data['curr_message'].edit_text(directory[3], reply_markup=reply_markup)
-
-        # except error.BadRequest:
-        #     user_data['curr_message'] = await update.message.reply_text(str(directory[3]), reply_markup=reply_markup)
         try:
             await update.message.delete()
         except AttributeError:
@@ -137,12 +126,12 @@ async def choose(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 file_conversation = ConversationHandler(
     entry_points=[MessageHandler(
-        filters.Document.ALL, file_received)],
+        filters.Document.ALL, file_received)],  # type: ignore
     states={
         File_conversation.choose_dir: [
             MessageHandler(filters.TEXT, choose),
             CallbackQueryHandler(choose)
         ],
-    },
+    },  # type: ignore
     fallbacks=[],
 )
