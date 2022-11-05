@@ -14,10 +14,10 @@ class File_conversation(Enum):
 
 
 class UserData(TypedDict):
-    last_file_id: int | None      # last received file from user
-    dir_id: int | None            # current dir id
-    dir_parent_id: int | None     # current dir parent id
-    curr_message: Message | None  # last message sent from the bot
+    last_file_id: Union[int, None]      # last received file from user
+    dir_id: Union[int, None]            # current dir id
+    dir_parent_id: Union[int, None]     # current dir parent id
+    curr_message: Union[Message, None]  # last message sent from the bot
 
 
 async def file_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
