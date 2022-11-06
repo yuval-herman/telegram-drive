@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import logging
 
-from telegram import (ForceReply, InlineKeyboardButton, InlineKeyboardMarkup,
+from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
                       Update)
 from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
                           ContextTypes, MessageHandler, filters)
@@ -76,12 +76,21 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await query.message.delete()
 
 
+async def bad_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(
+        "I can't process files not sent as documents.\n" +
+        "If you are trying to upload an image file, make sure the 'Compress images' flag is unchecked")
+
+
 def main() -> None:
     with open('token.txt', 'r') as token_file:
         application = Application.builder().token(token_file.read()).build()
 
     application.add_handler(file_conversation)
     application.add_handler(file_browsing)
+
+    application.add_handler(MessageHandler(
+        filters.ATTACHMENT & ~filters.Document.ALL, bad_data))
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler('search', search_commend))
