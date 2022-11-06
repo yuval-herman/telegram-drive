@@ -24,17 +24,17 @@ async def list(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
     user_data = cast(UserData, context.user_data)
     user_data['dir_id'] = None
-    dir_list = get_user_top_dirs(user.id)
+    dir_list = get_dir_names_under_dir(user.id, None)
     if len(dir_list) == 0:
-        await update.message.reply_text("You haven't added any files yet.\nSend me any file to start saving files.")
+        await user.send_message("You haven't added any files yet.\nSend me any file to start saving files.")
         return ConversationHandler.END
     keyboard = [
         [InlineKeyboardButton(
-            dir[3], callback_data=dir[3])] for dir in dir_list
+            dir, callback_data=dir)] for dir in ['cancel', *dir_list]
     ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
-    user_data['curr_message'] = await update.message.reply_text(
+    user_data['curr_message'] = await user.send_message(
         "Click on a Directory to see it's files", reply_markup=reply_markup)
     return Browse_conversation.choose_dir
 
@@ -53,8 +53,18 @@ async def choose(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = cast(UserData, context.user_data)
     if not user_data['curr_message']:
         user_data['curr_message'] = await update.effective_user.send_message('Thinking...')
-    directory = get_dir(user_data['dir_id'],
-                        message_text, update.effective_user.id)
+
+    if message_text == 'cancel':
+        return await cancel(update, context)
+    if message_text == '../' and user_data['dir_id']:
+        directory = get_parent_dir(
+            user_data['dir_id'], update.effective_user.id)
+        if not directory:
+            await user_data['curr_message'].delete()
+            return await list(update, context)
+    else:
+        directory = get_child_dir(user_data['dir_id'],
+                                  message_text[:-1], update.effective_user.id)
     if directory:
         user_data['dir_id'] = directory[0]
         dir_files_names = get_dir_names_under_dir(
@@ -63,7 +73,7 @@ async def choose(update: Update, context: ContextTypes.DEFAULT_TYPE):
             update.effective_user.id, directory[0]))
         keyboard = [
             [InlineKeyboardButton(
-                dir, callback_data=dir)] for dir in dir_files_names or []
+                dir, callback_data=dir)] for dir in ['cancel', '../', *dir_files_names] or []
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await user_data['curr_message'].edit_text(get_dir_full_path(update.effective_user.id, directory[0]), reply_markup=reply_markup)
@@ -81,13 +91,26 @@ async def choose(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_user:
+        return ConversationHandler.END
+    await update.effective_user.send_message('Wait what were we talking about again?😴')
+    try:
+        await cast(UserData, context.user_data)['curr_message'] \
+            .delete()  # type: ignore
+        await update.message.delete()
+    except Exception:
+        pass
+    return ConversationHandler.END
+
 file_browsing = ConversationHandler(
     entry_points=[CommandHandler('list', list)],  # type: ignore
     states={
         Browse_conversation.choose_dir: [
-            MessageHandler(filters.TEXT, choose),
+            MessageHandler(filters.TEXT & ~filters.COMMAND, choose),
             CallbackQueryHandler(choose)
         ],
     },  # type: ignore
-    fallbacks=[],
+    fallbacks=[CommandHandler('cancel', cancel)],  # type: ignore
+    conversation_timeout=60
 )

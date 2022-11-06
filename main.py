@@ -65,7 +65,7 @@ async def search_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Parses the CallbackQuery and updates the message text."""
     query = update.callback_query
-    if not query.data.isalnum():
+    if not query.data.isdigit():
         await query.answer('This button is not active anymore')
         return
     await query.answer()

@@ -44,16 +44,16 @@ def search_file_for_user(user_id: int, file_name: str) -> List[Tuple[str, int, i
     WHERE user_id = ? AND name LIKE ? AND dir is NOT NULL""", [user_id, f'%{file_name}%']).fetchall()
 
 
-def get_dir(parent_id: Union[int, None], name: str, user_id: int) -> Union[Directory, None]:
-    """directory structure is:
-    1.directory
-    2.directory_Parent
-    3.owner_id
-    4.name
-    """
+def get_child_dir(parent_id: Union[int, None], name: str, user_id: int) -> Union[Directory, None]:
     return cur.execute(f"""SELECT * FROM directories
     WHERE {"directory_Parent = ?" if parent_id else "directory_Parent is ?"}
     AND name = ? AND owner_id = ?""", [parent_id, name, user_id]).fetchone()
+
+
+def get_parent_dir(dir_id: int, user_id: int) -> Union[Directory, None]:
+    return cur.execute(f"""select * from directories
+    where directory = (SELECT directory_Parent FROM directories
+    WHERE directory = ? AND owner_id = ?)""", [dir_id, user_id]).fetchone()
 
 
 def get_root_dir_names(user_id: int) -> Union[List[str], None]:
@@ -62,8 +62,9 @@ def get_root_dir_names(user_id: int) -> Union[List[str], None]:
 
 
 def get_dir_names_under_dir(user_id: int, parent_dir: Union[int, None]) -> List[str]:
-    return [name[0] for name in cur.execute(f"""SELECT name FROM directories
-    WHERE directory_Parent = ? AND owner_id = ?""", [parent_dir, user_id]).fetchall()]
+    return [name[0]+'/' for name in cur.execute(f"""SELECT name FROM directories
+    WHERE {"directory_Parent = ?" if parent_dir else "directory_Parent is ?"}
+    AND owner_id = ?""", [parent_dir, user_id]).fetchall()]
 
 
 def get_file_names_under_dir(user_id: int, dir: Union[int, None]) -> List[str]:

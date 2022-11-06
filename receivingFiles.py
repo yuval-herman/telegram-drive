@@ -4,7 +4,7 @@ from typing import TypedDict, cast
 from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
                       Message, Update)
 from telegram.ext import (CallbackQueryHandler, ContextTypes,
-                          ConversationHandler, MessageHandler, filters)
+                          ConversationHandler, MessageHandler, filters, CommandHandler)
 
 from sqlDB import *
 
@@ -16,7 +16,6 @@ class File_conversation(Enum):
 class UserData(TypedDict):
     last_file_id: Union[List[int], None]      # last received file from user
     dir_id: Union[int, None]            # current dir id
-    dir_parent_id: Union[int, None]     # current dir parent id
     curr_message: Union[Message, None]  # last message sent from the bot
     mid_conversation: bool
 
@@ -39,7 +38,6 @@ async def file_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data['last_file_id'] = [file_id]
 
     user_data['dir_id'] = None
-    user_data['dir_parent_id'] = None
 
     options = ['cancel']
 
@@ -104,8 +102,8 @@ async def choose(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data['mid_conversation'] = False
         return ConversationHandler.END
 
-    directory = get_dir(user_data.get('dir_id'),
-                        message_text, update.effective_user.id)
+    directory = get_child_dir(user_data.get('dir_id'),
+                              message_text, update.effective_user.id)
     if directory:
         # generate reply options
         options = ['upload here', 'cancel']
@@ -134,6 +132,16 @@ async def choose(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'dir_id'), update.effective_user.id, message_text))
 
 
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text('Wait what were we talking about again?😴')
+    try:
+        await update.message.delete()
+        await cast(UserData, context.user_data)['curr_message'] \
+            .delete()  # type: ignore
+    except Exception:
+        pass
+    return ConversationHandler.END
+
 file_conversation = ConversationHandler(
     entry_points=[MessageHandler(
         filters.Document.ALL, file_received)],  # type: ignore
@@ -144,5 +152,6 @@ file_conversation = ConversationHandler(
             CallbackQueryHandler(choose)
         ],
     },  # type: ignore
-    fallbacks=[], conversation_timeout=60
+    fallbacks=[CommandHandler('cancel', cancel)],  # type: ignore
+    conversation_timeout=60
 )
