@@ -18,24 +18,30 @@ class UserData(TypedDict):
     curr_message: Union[Message, None]  # last message sent from the bot
 
 
+def files_dirs_keyboard(user_id: int, parent_dir: Union[int, None], extras: List[str] = []):
+    dir_files_names = get_dir_names_under_dir(user_id, parent_dir)
+    dir_files_names.extend(get_file_names_under_dir(user_id, parent_dir))
+    keyboard = [
+        [InlineKeyboardButton(
+            dir, callback_data=dir)] for dir in [*extras, *dir_files_names]
+    ]
+    return InlineKeyboardMarkup(keyboard), keyboard
+
+
 async def list(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    if not user:
+    if not update.effective_user:
         return ConversationHandler.END
     user_data = cast(UserData, context.user_data)
     user_data['dir_id'] = None
-    dir_list = get_dir_names_under_dir(user.id, None)
-    if len(dir_list) == 0:
-        await user.send_message("You haven't added any files yet.\nSend me any file to start saving files.")
+    keyboard, key_list = files_dirs_keyboard(
+        update.effective_user.id, None, ['cancel'])
+    if len(key_list) == 0:
+        await update.effective_user.send_message(
+            "You haven't added any files yet.\nSend me any file to start saving files.")
         return ConversationHandler.END
-    keyboard = [
-        [InlineKeyboardButton(
-            dir, callback_data=dir)] for dir in ['cancel', *dir_list]
-    ]
 
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    user_data['curr_message'] = await user.send_message(
-        "Click on a Directory to see it's files", reply_markup=reply_markup)
+    user_data['curr_message'] = await update.effective_user.send_message(
+        "Click on a Directory to see it's files", reply_markup=keyboard)
     return Browse_conversation.choose_dir
 
 
@@ -51,6 +57,7 @@ async def choose(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         message_text = update.message.text
     user_data = cast(UserData, context.user_data)
+
     if not user_data['curr_message']:
         user_data['curr_message'] = await update.effective_user.send_message('Thinking...')
 
@@ -67,16 +74,10 @@ async def choose(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                   message_text[:-1], update.effective_user.id)
     if directory:
         user_data['dir_id'] = directory[0]
-        dir_files_names = get_dir_names_under_dir(
-            update.effective_user.id, directory[0])
-        dir_files_names.extend(get_file_names_under_dir(
-            update.effective_user.id, directory[0]))
-        keyboard = [
-            [InlineKeyboardButton(
-                dir, callback_data=dir)] for dir in ['cancel', '../', *dir_files_names] or []
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await user_data['curr_message'].edit_text(get_dir_full_path(update.effective_user.id, directory[0]), reply_markup=reply_markup)
+        await user_data['curr_message'].edit_text(
+            get_dir_full_path(update.effective_user.id, directory[0]),
+            reply_markup=files_dirs_keyboard(
+                update.effective_user.id, directory[0], ['cancel', '../'])[0])
         return
     elif user_data['dir_id']:
         file_id = get_telegramID_by_name(
