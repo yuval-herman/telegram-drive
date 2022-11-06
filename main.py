@@ -22,9 +22,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     if not user:
         return
+    await update.message.reply_html(f"Hi {user.mention_html()}!\n" +
+                                    "Here is how to use this bot, to show help at any time send /help.")
+    await help(update, context)
+
+
+async def help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send a message when the command /start is issued."""
+    user = update.effective_user
+    if not user:
+        return
     await update.message.reply_html(
-        rf"Hi {user.mention_html()}!",
-        reply_markup=ForceReply(selective=True),
+        "Send any file as a document to save it.\n"
+        "Send a text message to search all your files.\n"
+        "Send /list to view all your folders and retrieve a file.\n"
     )
 
 
@@ -74,6 +85,7 @@ def main() -> None:
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler('search', search_commend))
+    application.add_handler(CommandHandler('help', help))
 
     application.add_handler(CallbackQueryHandler(button))
 
