@@ -14,10 +14,11 @@ class File_conversation(Enum):
 
 
 class UserData(TypedDict):
-    last_file_id: Union[int, None]      # last received file from user
+    last_file_id: Union[List[int], None]      # last received file from user
     dir_id: Union[int, None]            # current dir id
     dir_parent_id: Union[int, None]     # current dir parent id
     curr_message: Union[Message, None]  # last message sent from the bot
+    mid_conversation: bool
 
 
 async def file_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -32,11 +33,13 @@ async def file_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_id = insert_file(file_name, received_file.file_id,
                           user.id)
 
-    # initialize user data for conversation
-    user_data['last_file_id'] = file_id
+    if user_data.get('mid_conversation') and isinstance(user_data['last_file_id'], list):
+        user_data['last_file_id'].append(file_id)
+    else:
+        user_data['last_file_id'] = [file_id]
+
     user_data['dir_id'] = None
     user_data['dir_parent_id'] = None
-    user_data['curr_message'] = None
 
     options = ['cancel']
 
@@ -46,14 +49,17 @@ async def file_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
             option, callback_data=option)] for option in options
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-
-    user_data['curr_message'] = (
-        await update.message.reply_text(f'I got your file, {file_name}!\n' +
-                                        'where would you like to save it?', reply_markup=reply_markup))
+    reply_msg = f'I got your file, {file_name}!\n' + \
+        'where would you like to save it?'
+    if len(user_data['last_file_id']) > 1:
+        reply_msg = f'I got {len(user_data["last_file_id"])} files!\n Where would you like to save them?'
+        await user_data['curr_message'].delete()  # type: ignore
+    user_data['curr_message'] = await update.message.reply_text(reply_msg, reply_markup=reply_markup)
     try:
         await update.message.delete()
     except AttributeError:
         pass
+    user_data['mid_conversation'] = True
     return File_conversation.choose_dir
 
 
@@ -71,6 +77,7 @@ async def choose(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = cast(UserData, context.user_data)
     if not user_data['last_file_id']:
         await update.message.reply_text('critical error occurred.\n please try again later')
+        user_data['mid_conversation'] = False
         return ConversationHandler.END
 
     if not user_data['curr_message']:
@@ -81,17 +88,20 @@ async def choose(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await user_data['curr_message'].edit_text("can't upload to the root directory.\n" +
                                                       "create a directory first by sending any name and upload your file there.")
             return
-        change_file_dir(
-            user_data['last_file_id'], user_data['dir_id'])
+        for file in user_data['last_file_id']:
+            change_file_dir(
+                file, user_data['dir_id'])
         await user_data['curr_message'].edit_text("uploaded successfully", reply_markup=InlineKeyboardMarkup([]))
 
         try:
             await update.message.delete()
         except AttributeError:
             pass
+        user_data['mid_conversation'] = False
         return ConversationHandler.END
     if message_text == 'cancel':
         await user_data['curr_message'].edit_text("Alright, I'm just gonna forget you did that👀", reply_markup=InlineKeyboardMarkup([]))
+        user_data['mid_conversation'] = False
         return ConversationHandler.END
 
     directory = get_dir(user_data.get('dir_id'),
@@ -129,9 +139,10 @@ file_conversation = ConversationHandler(
         filters.Document.ALL, file_received)],  # type: ignore
     states={
         File_conversation.choose_dir: [
+            MessageHandler(filters.Document.ALL, file_received),
             MessageHandler(filters.TEXT, choose),
             CallbackQueryHandler(choose)
         ],
     },  # type: ignore
-    fallbacks=[],
+    fallbacks=[], conversation_timeout=60
 )

@@ -22,10 +22,12 @@ con.commit()
 Directory = Tuple[int, int, int, str]
 
 
-def insert_file(name: str, telegram_id: str, user_id: int, directory: Union[int, None] = None) -> Union[int, None]:
+def insert_file(name: str, telegram_id: str, user_id: int, directory: Union[int, None] = None) -> int:
     rowid = cur.execute("INSERT INTO files (name,telegram_id,user_id,dir) VALUES(?,?,?,?)",
                         [name, telegram_id, user_id, directory]).lastrowid
     con.commit()
+    if rowid is None:
+        raise Exception("Database error: couldn't insert file")
     return rowid
 
 
@@ -71,7 +73,7 @@ def get_file_names_under_dir(user_id: int, dir: Union[int, None]) -> List[str]:
 
 def get_telegramID_by_name(user_id: int, dir: int, name: str) -> Union[str, None]:
     return cur.execute(f"""select telegram_id from files 
-        where dir = ? AND user_id = ?""", [dir, user_id]).fetchone()[0]
+        where dir = ? AND user_id = ? AND name = ?""", [dir, user_id, name]).fetchone()[0]
 
 
 def get_dir_full_path(user_id: int, dir_id: int) -> str:

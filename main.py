@@ -54,6 +54,9 @@ async def search_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Parses the CallbackQuery and updates the message text."""
     query = update.callback_query
+    if not query.data.isalnum():
+        await query.answer('This button is not active anymore')
+        return
     await query.answer()
     file_id = get_telegramID_by_id(int(query.data))
     await query.edit_message_reply_markup(None)
