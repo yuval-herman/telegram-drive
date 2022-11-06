@@ -1,21 +1,25 @@
+import json
 from enum import Enum, auto
 from typing import TypedDict, cast
 
-from telegram import (InlineKeyboardButton, Message, InlineKeyboardMarkup,
+from telegram import (InlineKeyboardButton, InlineKeyboardMarkup, Message,
                       Update)
-from telegram.ext import (ContextTypes, ConversationHandler, MessageHandler,
-                          filters, CallbackQueryHandler, CommandHandler)
+from telegram.ext import (CallbackQueryHandler, CommandHandler, ContextTypes,
+                          ConversationHandler, MessageHandler, filters)
 
 from sqlDB import *
 
 
 class Browse_conversation(Enum):
     choose_dir = auto()
+    rename = auto()
 
 
 class UserData(TypedDict):
     dir_id: Union[int, None]            # current dir id
     curr_message: Union[Message, None]  # last message sent from the bot
+    file_id: Union[int, None]           # used for rename and delete
+    old_name: str                       # used for rename
 
 
 def files_dirs_keyboard(user_id: int, parent_dir: Union[int, None], extras: List[str] = []):
@@ -23,8 +27,12 @@ def files_dirs_keyboard(user_id: int, parent_dir: Union[int, None], extras: List
     dir_files_names.extend(get_file_names_under_dir(user_id, parent_dir))
     keyboard = [
         [InlineKeyboardButton(
-            dir, callback_data=dir)] for dir in [*extras, *dir_files_names]
+            btn, callback_data=btn)] for btn in extras
     ]
+    keyboard.extend([
+        [InlineKeyboardButton(file, callback_data=file),
+         InlineKeyboardButton('rename', callback_data=json.dumps(['rename', file]))] for file in dir_files_names
+    ])
     return InlineKeyboardMarkup(keyboard), keyboard
 
 
@@ -60,6 +68,21 @@ async def choose(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not user_data['curr_message']:
         user_data['curr_message'] = await update.effective_user.send_message('Thinking...')
+
+    try:
+        action, file = json.loads(message_text)
+        if action == 'rename':
+            await user_data['curr_message'].edit_text(f"Send {file}'s new name")
+            user_data['file_id'] = get_fileID_by_name(
+                update.effective_user.id, user_data['dir_id'], file)
+            file = file[:-1]
+            if not user_data['file_id']:
+                user_data['dir_id'] = (get_child_dir(
+                    user_data['dir_id'], file, update.effective_user.id) or [None])[0]
+            user_data['old_name'] = file
+            return Browse_conversation.rename
+    except json.decoder.JSONDecodeError:
+        pass
 
     if message_text == 'cancel':
         return await cancel(update, context)
@@ -104,6 +127,25 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
     return ConversationHandler.END
 
+
+async def rename(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_user:
+        return ConversationHandler.END
+    user_data = cast(UserData, context.user_data)
+    if user_data['file_id']:
+        change_file_name(update.message.text, user_data['file_id'])
+    elif user_data['dir_id']:
+        change_dir_name(update.message.text, user_data['dir_id'])
+    if user_data['curr_message']:
+        await user_data['curr_message'].edit_text(f"""change successful!\n
+            {user_data["old_name"]} -> {update.message.text}""")
+    else:
+        await update.effective_user.send_message(f"""change successful!\n
+            {user_data["old_name"]} -> {update.message.text}""")
+    await update.message.delete()
+    return ConversationHandler.END
+
+
 file_browsing = ConversationHandler(
     entry_points=[CommandHandler('list', list)],  # type: ignore
     states={
@@ -111,7 +153,12 @@ file_browsing = ConversationHandler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, choose),
             CallbackQueryHandler(choose)
         ],
+        Browse_conversation.rename: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, rename),
+        ]
     },  # type: ignore
     fallbacks=[CommandHandler('cancel', cancel)],  # type: ignore
     conversation_timeout=60
+
+
 )

@@ -77,6 +77,12 @@ def get_telegramID_by_name(user_id: int, dir: int, name: str) -> Union[str, None
         where dir = ? AND user_id = ? AND name = ?""", [dir, user_id, name]).fetchone()[0]
 
 
+def get_fileID_by_name(user_id: int, dir: Union[int, None], name: str) -> Union[int, None]:
+    return (cur.execute(f"""select id from files 
+        where {"dir = ?" if dir else "dir is ?"}
+        AND user_id = ? AND name = ?""", [dir, user_id, name]).fetchone() or [None])[0]
+
+
 def get_dir_full_path(user_id: int, dir_id: int) -> str:
     directory: Directory = cur.execute(
         "select * from directories where owner_id = ? and directory = ?", [user_id, dir_id]).fetchone()
@@ -89,7 +95,7 @@ def get_dir_full_path(user_id: int, dir_id: int) -> str:
 
 
 def change_file_dir(file_id: int, directory_id: int):
-    cur.execute("""UPDATE files SET dir = ? WHERE id = ?""",
+    cur.execute("UPDATE files SET dir = ? WHERE id = ?",
                 [directory_id, file_id])
     con.commit()
 
@@ -103,3 +109,14 @@ def insert_dir(directory_Parent: Union[int, None], owner_id: int, name: str) -> 
 
 def get_user_top_dirs(user_id: int) -> List[Directory]:
     return cur.execute("SELECT * FROM directories WHERE owner_id = ? AND directory_Parent is NULL", [user_id]).fetchall()
+
+
+def change_file_name(new_name: str, file_id: int) -> None:
+    cur.execute("UPDATE files SET name = ? WHERE id = ?", [new_name, file_id])
+    con.commit()
+
+
+def change_dir_name(new_name: str, dir_id: int) -> None:
+    cur.execute("UPDATE directories SET name = ? WHERE directory = ?",
+                [new_name, dir_id])
+    con.commit()
