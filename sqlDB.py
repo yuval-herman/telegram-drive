@@ -50,7 +50,8 @@ def get_dir(parent_id: Union[int, None], name: str, user_id: int) -> Union[Direc
     4.name
     """
     return cur.execute(f"""SELECT * FROM directories
-    WHERE {"directory_Parent = ?" if parent_id else "directory_Parent is ?"} AND name = ? AND owner_id = ?""", [parent_id, name, user_id]).fetchone()
+    WHERE {"directory_Parent = ?" if parent_id else "directory_Parent is ?"}
+    AND name = ? AND owner_id = ?""", [parent_id, name, user_id]).fetchone()
 
 
 def get_root_dir_names(user_id: int) -> Union[List[str], None]:
@@ -58,9 +59,19 @@ def get_root_dir_names(user_id: int) -> Union[List[str], None]:
     WHERE directory_Parent is null AND owner_id = ?""", [user_id]).fetchall() or [])]
 
 
-def get_dir_names_under_dir(user_id: int, parent_dir: Union[int, None]) -> Union[List[str], None]:
-    return [name[0] for name in (cur.execute(f"""SELECT name FROM directories
-    WHERE directory_Parent = ? AND owner_id = ?""", [parent_dir, user_id]).fetchall() or [])]
+def get_dir_names_under_dir(user_id: int, parent_dir: Union[int, None]) -> List[str]:
+    return [name[0] for name in cur.execute(f"""SELECT name FROM directories
+    WHERE directory_Parent = ? AND owner_id = ?""", [parent_dir, user_id]).fetchall()]
+
+
+def get_file_names_under_dir(user_id: int, dir: Union[int, None]) -> List[str]:
+    return [name[0] for name in cur.execute(f"""select name from files 
+        where dir = ? AND user_id = ?""", [dir, user_id]).fetchall()]
+
+
+def get_telegramID_by_name(user_id: int, dir: int, name: str) -> Union[str, None]:
+    return cur.execute(f"""select telegram_id from files 
+        where dir = ? AND user_id = ?""", [dir, user_id]).fetchone()[0]
 
 
 def get_dir_full_path(user_id: int, dir_id: int) -> str:
@@ -85,3 +96,7 @@ def insert_dir(directory_Parent: Union[int, None], owner_id: int, name: str) -> 
         directory_Parent, owner_id, name]).lastrowid
     con.commit()
     return rowid
+
+
+def get_user_top_dirs(user_id: int) -> List[Directory]:
+    return cur.execute("SELECT * FROM directories WHERE owner_id = ? AND directory_Parent is NULL", [user_id]).fetchall()

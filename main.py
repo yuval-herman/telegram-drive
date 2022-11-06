@@ -7,6 +7,7 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
                           ContextTypes, MessageHandler, filters)
 
 from receivingFiles import file_conversation
+from browseFiles import file_browsing
 from sqlDB import *
 
 # Enable logging
@@ -25,22 +26,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         rf"Hi {user.mention_html()}!",
         reply_markup=ForceReply(selective=True),
     )
-
-
-async def list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user = update.effective_user
-    if not user:
-        return
-    file_list = get_user_files(user.id)
-    if len(file_list) == 0:
-        await update.message.reply_text("You haven't added any files yet.\nSend me any file to start saving files.")
-    keyboard = [
-        [InlineKeyboardButton(
-            get_dir_full_path(user.id, file[2])+file[0], callback_data=file[1])] for file in file_list
-    ]
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text('Click on a file to get it', reply_markup=reply_markup)
 
 
 async def search_commend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -82,9 +67,9 @@ def main() -> None:
         application = Application.builder().token(token_file.read()).build()
 
     application.add_handler(file_conversation)
+    application.add_handler(file_browsing)
 
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler('list', list))
     application.add_handler(CommandHandler('search', search_commend))
 
     application.add_handler(CallbackQueryHandler(button))
