@@ -27,6 +27,7 @@ async def list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     dir_list = get_user_top_dirs(user.id)
     if len(dir_list) == 0:
         await update.message.reply_text("You haven't added any files yet.\nSend me any file to start saving files.")
+        return ConversationHandler.END
     keyboard = [
         [InlineKeyboardButton(
             dir[3], callback_data=dir[3])] for dir in dir_list
