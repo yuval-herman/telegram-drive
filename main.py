@@ -67,6 +67,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if not query.data.isdigit():
         await query.answer('This button is not active anymore')
+        if (query.message):
+            await query.message.delete()
         return
     await query.answer()
     file_id = get_telegramID_by_id(int(query.data))
