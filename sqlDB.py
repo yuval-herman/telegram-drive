@@ -120,3 +120,14 @@ def change_dir_name(new_name: str, dir_id: int) -> None:
     cur.execute("UPDATE directories SET name = ? WHERE directory = ?",
                 [new_name, dir_id])
     con.commit()
+
+
+def change_file_parent(new_parent: int, file_id: int) -> None:
+    cur.execute("UPDATE files SET dir = ? WHERE id = ?", [new_parent, file_id])
+    con.commit()
+
+
+def change_dir_parent(new_parent: int, dir_id: int) -> None:
+    cur.execute("UPDATE directories SET directory_Parent = ? WHERE directory = ?",
+                [new_parent, dir_id])
+    con.commit()

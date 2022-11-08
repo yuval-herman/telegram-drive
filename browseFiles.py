@@ -13,13 +13,15 @@ from sqlDB import *
 class Browse_conversation(Enum):
     choose_dir = auto()
     rename = auto()
+    move = auto()
 
 
 class UserData(TypedDict):
     dir_id: Union[int, None]            # current dir id
     curr_message: Union[Message, None]  # last message sent from the bot
-    file_id: Union[int, None]           # used for rename and delete
+    file_id: Union[int, None]           # used for rename and move
     old_name: str                       # used for rename
+    old_dir: int                        # used for move
 
 
 def files_dirs_keyboard(user_id: int, parent_dir: Union[int, None], extras: List[str] = []):
@@ -29,10 +31,12 @@ def files_dirs_keyboard(user_id: int, parent_dir: Union[int, None], extras: List
         [InlineKeyboardButton(
             btn, callback_data=btn)] for btn in extras
     ]
-    keyboard.extend([
-        [InlineKeyboardButton(file, callback_data=file),
-         InlineKeyboardButton('rename', callback_data=json.dumps(['rename', file]))] for file in dir_files_names
-    ])
+    for file in dir_files_names:
+        keyboard.append([
+            InlineKeyboardButton(file, callback_data=file),
+            InlineKeyboardButton(
+                'rename', callback_data=json.dumps(['rename', file])),
+            InlineKeyboardButton('move', callback_data=json.dumps(['move', file]))])
     return InlineKeyboardMarkup(keyboard), keyboard
 
 
@@ -75,12 +79,34 @@ async def choose(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await user_data['curr_message'].edit_text(f"Send {file}'s new name")
             user_data['file_id'] = get_fileID_by_name(
                 update.effective_user.id, user_data['dir_id'], file)
-            file = file[:-1]
             if not user_data['file_id']:
+                file = file[:-1]
                 user_data['dir_id'] = (get_child_dir(
                     user_data['dir_id'], file, update.effective_user.id) or [None])[0]
             user_data['old_name'] = file
             return Browse_conversation.rename
+        elif action == 'move':
+            options = ['cancel']
+            options.extend(get_dir_names_under_dir(
+                update.effective_user.id, None) or [])
+            keyboard = [[InlineKeyboardButton(
+                option, callback_data=option)] for option in options]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await user_data['curr_message'].edit_text(f"Choose a new directory to put '{file}' in", reply_markup=reply_markup)
+            user_data['file_id'] = get_fileID_by_name(
+                update.effective_user.id, user_data['dir_id'], file)
+            user_data['old_dir'] = cast(int, user_data['dir_id'])
+            if not user_data['file_id']:
+                file = file[:-1]
+                old_dir = get_child_dir(
+                    user_data['old_dir'], file, update.effective_user.id)
+                if not old_dir:
+                    await user_data['curr_message'].edit_text("Error occurred 🤪\ntry again later...")
+                    return ConversationHandler.END
+                user_data['old_dir'] = old_dir[0]
+            user_data['old_name'] = file
+            user_data['dir_id'] = None
+            return Browse_conversation.move
     except json.decoder.JSONDecodeError:
         pass
 
@@ -146,6 +172,81 @@ async def rename(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+async def move(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_user:
+        return ConversationHandler.END
+    user_data = cast(UserData, context.user_data)
+    query = update.callback_query
+    if query:
+        await query.answer()
+        message_text = query.data
+    else:
+        message_text = update.message.text
+    if message_text[-1] == '/':
+        message_text = message_text[:-1]
+
+    if not user_data['curr_message']:
+        user_data['curr_message'] = await update.effective_user.send_message('Thinking...')
+
+    if message_text == 'move here':
+        if not user_data['dir_id']:
+            await user_data['curr_message'].edit_text("can't upload to the root directory.\n" +
+                                                      "create a directory first by sending any name and upload your file there.")
+            return ConversationHandler.END
+        new_dir = message_text
+        if user_data['file_id']:
+            change_file_parent(user_data['dir_id'], user_data['file_id'])
+        elif user_data['old_dir']:
+            new_dir = 'moved directory'
+            change_dir_parent(user_data['dir_id'], user_data['old_dir'])
+        if user_data['curr_message']:
+            await user_data['curr_message'].edit_text(f"""change successful!\n
+                {user_data["old_name"]} -> {new_dir}""")
+        else:
+            await update.effective_user.send_message(f"""change successful!\n
+                {user_data["old_name"]} -> {new_dir}""")
+        try:
+            await update.message.delete()
+        except AttributeError:
+            pass
+        return ConversationHandler.END
+    if message_text == 'cancel':
+        await user_data['curr_message'].edit_text("Alright, I'm just gonna forget you did that👀", reply_markup=InlineKeyboardMarkup([]))
+        return ConversationHandler.END
+
+    directory = get_child_dir(user_data.get('dir_id'),
+                              message_text, update.effective_user.id)
+    if directory:
+        # generate reply options
+        options = ['move here', 'cancel']
+        options.extend(get_dir_names_under_dir(
+            update.effective_user.id, directory[0]) or [])
+        keyboard = [[InlineKeyboardButton(
+            option, callback_data=option)] for option in options]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await user_data['curr_message'].edit_text(directory[3], reply_markup=reply_markup)
+        try:
+            await update.message.delete()
+        except AttributeError:
+            pass
+        user_data['dir_id'] = directory[0]
+        return
+    try:
+        await update.message.delete()
+    except AttributeError:
+        pass
+    options = ['move here', 'cancel']
+    keyboard = [[InlineKeyboardButton(
+        option, callback_data=option)] for option in options]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await user_data['curr_message'].edit_text(f"created new directory '{message_text}'", reply_markup=reply_markup)
+    user_data['dir_id'] = (insert_dir(user_data.get(
+        'dir_id'), update.effective_user.id, message_text))
+    if update.message:
+        await update.message.delete()
+    return ConversationHandler.END
+
+
 file_browsing = ConversationHandler(
     entry_points=[CommandHandler('list', list)],  # type: ignore
     states={
@@ -155,6 +256,10 @@ file_browsing = ConversationHandler(
         ],
         Browse_conversation.rename: [
             MessageHandler(filters.TEXT & ~filters.COMMAND, rename),
+        ],
+        Browse_conversation.move: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, move),
+            CallbackQueryHandler(move)
         ]
     },  # type: ignore
     fallbacks=[CommandHandler('cancel', cancel)],  # type: ignore
