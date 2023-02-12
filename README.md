@@ -18,3 +18,4 @@ Working instance at http://t.me/file_storm_bot
 2. If you created a virtual environment activate it with `. env/bin/activate`.
 3. Install the requirements with `pip install -r requirements.txt`.
 4. Place the secret token in a file named token.txt in the root of the project file.
+5. That's it! now just run `python3 main.py`.
